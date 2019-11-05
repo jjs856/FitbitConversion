@@ -1,0 +1,152 @@
+#Packages
+list.of.packages <-
+  c("lubridate",
+    "jsonlite",
+    "data.table",
+    "dplyr")
+
+new.packages <-
+  list.of.packages[!(list.of.packages %in% installed.packages()[, "Package"])]
+if (length(new.packages))
+  install.packages(new.packages)
+
+library(data.table)
+library(jsonlite)
+library(lubridate)
+library(dplyr)
+
+#Function
+readJSON <- function(filename) {
+  result <- fromJSON(filename)
+  return(result)
+}
+
+list2frame <- function(inputList) {
+  result <- as.data.frame(inputList)
+  return(result)
+}
+
+#Variables
+
+path <- "C:/Users/jslan/Desktop/Fitbit"
+  intrPath <- "C:/Users/jslan/Desktop/Fitbit"
+  
+setwd(path)
+
+participants <- list.dirs(path = path, full.names = F, recursive = F)
+participants <- grep("^[0-9]*$", participants, value = T)
+
+# intervals <-
+#   fread(paste0(intrPath, "intervals.csv"),
+#         sep = ",",
+#         data.table = FALSE)
+
+for (i in 1:length(participants)) {
+  current_participant <- participants[i]
+  current_path <- paste(current_participant, "/", "Raw/", sep = "")
+  # current_path <- current_participant
+  print(current_path)
+  
+  # extract the json files related to each feture
+  heartrateDataFiles <-
+    dir(paste0(path, current_path),
+        pattern = "^heart_rate-([0-9])+",
+        full.names = T)
+  
+  caloriesDataFiles <-
+    dir(paste0(path, current_path),
+        pattern = "^calories-([0-9])+",
+        full.names = TRUE)
+  
+  stepsDateFiles <-
+    dir(paste0(path, current_path),
+        pattern = "^steps-([0-9])+",
+        full.names = TRUE)
+  
+  distanceDataFiles <-
+    dir(paste0(path, current_path),
+        pattern = "^distance-([0-9])+",
+        full.names = TRUE)
+  
+  # if the current_path is empty
+  if (
+    length(heartrateDataFiles) == 0 
+      || length(caloriesDataFiles) == 0 
+      || length(stepsDateFiles) == 0 
+      || length(distanceDataFiles) == 0
+  ){
+    next
+  }
+  
+  heartrate <- sapply(heartrateDataFiles, readJSON)
+  bpm <-
+    sapply(heartrate[seq(1, length(heartrate), 2) + 1], list2frame)
+  bpm <- unlist(bpm[seq(1, length(heartrate), 2)])
+  heartrate <-
+    as.data.frame(cbind(unlist(heartrate[seq(1, length(heartrate), 2)]), bpm))
+  colnames(heartrate) <- c("DateTime", "Heart")
+  heartrate[, "DateTime"] <-
+    as.POSIXct(heartrate[, "DateTime"], format = "%m/%d/%y %H:%M:%S")
+  heartrate <- heartrate[order(heartrate[, 1]), ]
+  
+  calories <- sapply(caloriesDataFiles, readJSON)
+  calories <-
+    as.data.frame(cbind(unlist(calories[seq(1, length(calories), 2)]), unlist(calories[seq(1, length(calories), 2) +
+                                                                                         1])))
+  colnames(calories) <- c("DateTime", "Calories")
+  calories[, "DateTime"] <-
+    as.POSIXct(calories[, "DateTime"], format = "%m/%d/%y %H:%M:%S")
+  calories <- calories[order(calories[, 1]), ]
+  
+  steps <- sapply(stepsDateFiles, readJSON)
+  steps <-
+    as.data.frame(cbind(unlist(steps[seq(1, length(steps), 2)]), unlist(steps[seq(1, length(steps), 2) +
+                                                                                1])))
+  colnames(steps) <- c("DateTime", "Steps")
+  steps[, "DateTime"] <-
+    as.POSIXct(steps[, "DateTime"], format = "%m/%d/%y %H:%M:%S")
+  steps <- steps[order(steps[, 1]), ]
+  
+  distance <- sapply(distanceDataFiles, readJSON)
+  distance <-
+    as.data.frame(cbind(unlist(distance[seq(1, length(distance), 2)]), unlist(distance[seq(1, length(distance), 2) +
+                                                                                         1])))
+  colnames(distance) <- c("DateTime", "Distance")
+  distance[, "DateTime"] <-
+    as.POSIXct(distance[, "DateTime"], format = "%m/%d/%y %H:%M:%S")
+  distance <- distance[order(distance[, 1]), ]
+  
+  uid <- current_participant
+  
+  heartrateTMP <- heartrate
+  caloriesTMP <- calories
+  stepsTMP <- steps
+  distanceTMP <- distance
+  
+  output <- full_join(heartrate, calories)
+  output <- full_join(output, steps)
+  output <- full_join(output, distance)
+  
+  #=========================Exporting========================
+  #Save the results as a CSV file
+  write.csv(output,
+            paste0(current_participant, "/fitbit_data_", uid, ".csv"),
+            row.names = FALSE)
+  
+  write.csv(heartrateTMP,
+            paste0(current_participant, "/heartrate_", uid, ".csv"),
+            row.names = FALSE)
+  
+  write.csv(stepsTMP,
+            paste0(current_participant, "/steps_", uid, ".csv"),
+            row.names = FALSE)
+  
+  write.csv(caloriesTMP,
+            paste0(current_participant, "/calories_", uid, ".csv"),
+            row.names = FALSE)
+  
+  write.csv(distanceTMP,
+            paste0(current_participant, "/distance_", uid, ".csv"),
+            row.names = FALSE)
+}
+
